@@ -11,11 +11,11 @@ import sys
 
 prep = ['', 'to', 'to the']
 dest = {'': ['home', 'nowhere'],
-        'to': ['Japan', 'school', 'Germany', 'Canada'],
+        'to': ['japan', 'school', 'germany', 'canada'],
         'to the': ['stadium', 'station', 'hospital', 'classroom', 'kitchen', 'morgue']}
 advb = ['slowly', 'quickly', 'suddenly', 'reluctantly', 'happily']
 when = ['ten minutes ago', 'five minutes ago', 'yesterday', 'earlier']
-subj = ['She', 'He']
+subj = ['she', 'he']
 
 
 def tokenize(text):
@@ -37,20 +37,20 @@ def generate_sentence(s=None):
     # insert adverb before verb with prob. 40%, after destination with prob. 40%, no adverb with prob. 20%
     r1 = np.random.rand()
     if r1 < 0.2:
-        sentence = ' '.join([s, v, p, d])     # e.g. 'She went to school'
+        sentence = ' '.join([s, v, p, d])     # e.g. 'she went to school'
     elif r1 < 0.6:
-        sentence = ' '.join([s, a, v, p, d])  # e.g. 'She reluctantly went to school'
+        sentence = ' '.join([s, a, v, p, d])  # e.g. 'she reluctantly went to school'
     else:
-        sentence = ' '.join([s, v, p, d, a])  # e.g. 'She went to school reluctantly'
+        sentence = ' '.join([s, v, p, d, a])  # e.g. 'she went to school reluctantly'
 
     # insert clause specifying time with probability 50%
     r2 = np.random.rand()
     if r2 < 0.5:
-        sentence += ' ' + w                   # e.g. 'She went to school reluctantly yesterday'
+        sentence += ' ' + w                   # e.g. 'she went to school reluctantly yesterday'
 
     sentence = sentence.replace('  ', ' ')
-    # record index of destination only if subject is 'She'
-    if s == 'She':
+    # record index of destination only if subject is 'she'
+    if s == 'she':
         index = sentence.split(' ').index(d)
     else:
         index = 0
@@ -59,16 +59,16 @@ def generate_sentence(s=None):
 
 def generate_passage(n):
     """Generate a passage composed of n random sentences."""
-    # ensures that at least one of n sentences has the subject 'She'
-    data = [generate_sentence('She')]
+    # ensures that at least one of n sentences has the subject 'she'
+    data = [generate_sentence('she')]
     for _ in range(n-1):
         data.append(generate_sentence())
     random.shuffle(data)
 
     sentences = ' '.join(d[0] for d in data)   # join all sentences to create passage
-    indices = [d[1] for d in data]             # indices of destination of 'She' (index is relative to each sentence)
+    indices = [d[1] for d in data]             # indices of destination of 'she' (index is relative to each sentence)
 
-    # sentence containing destination is final sentence for which 'She' is the subject
+    # sentence containing destination is final sentence for which 'she' is the subject
     target_sentence = max([i for i, e in enumerate(indices) if e > 0])
     index = 0
     for i in range(target_sentence):
@@ -100,5 +100,5 @@ if __name__ == '__main__':
             vocab = vocab.union(set(tokenize(passage)))
 
     with open(args.vocab_path, 'w') as file:
-        vocab_dict = {word: i for i, word in enumerate(list(vocab))}
+        vocab_dict = {word: i+1 for i, word in enumerate(list(vocab))}  # reserve 0 for padding
         json.dump(vocab_dict, file)
