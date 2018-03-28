@@ -7,7 +7,6 @@ import json
 import numpy as np
 import os
 import sys
-from data import tokenize
 
 
 def load_glove(path):
@@ -37,32 +36,14 @@ def embedding_matrix(vocab, embed_vectors, embed_size):
         embed_vectors (dict): dictionary mapping each word to its vector representation.
         embed_size (int):     length of each embedding vector.
     Returns:
-        np.ndarray:           embedding matrix with shape (vocab size+1, embedding size)
+        np.ndarray:           embedding matrix with shape (vocab size+2, embedding size)
     """
-    matrix = np.zeros((len(vocab)+1, embed_size))  # extra row for padding
+    matrix = np.zeros((len(vocab)+2, embed_size))  # extra rows for padding, EOF
     for word, i in vocab.items():
         vector = embed_vectors[word]
         assert vector.size == embed_size, 'All embedding vectors must have same length.'
         matrix[i] = vector
     return matrix
-
-
-def encode(vocab, batch, max_length):
-    """Encode a batch of data as a sequence of integers according to vocabulary dictionary.
-
-    Args:
-        vocab (dict):     a dictionary mapping each word in vocabulary to unique integer.
-        batch (list):     a list of passages. (e.g. ['She went home. He went home.', 'She went to school.'])
-        max_length (int): length to pad each sequence to.
-    Returns:
-        np.ndarray:       an array of integer-encoded words of shape (batch size, max sequence length)
-    """
-    encoded_batch = np.empty((len(batch), max_length), dtype=int)
-    for i, passage in enumerate(batch):
-        encoding = [vocab[word] for word in tokenize(passage)]
-        padded = encoding + [0]*(max_length - len(encoding))
-        encoded_batch[i] = padded
-    return encoded_batch
 
 
 if __name__ == '__main__':
