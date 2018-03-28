@@ -7,6 +7,7 @@ import json
 import numpy as np
 import os
 import random
+import re
 import sys
 
 prep = ['', 'to', 'to the']
@@ -77,6 +78,58 @@ def generate_passage(n):
     return sentences, index
 
 
+class Loader(object):
+    """Text data loader."""
+    def __init__(self, data_path, vocab_path, batch_size, seq_length):
+        self.data_path = data_path
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+
+        with open(vocab_path, 'r') as f:
+            self.vocab = json.load(f)
+            self.vocab_size = len(self.vocab)
+
+        self.embedding = np.empty(())
+        self.labels = np.empty(())
+        self.n_batches = None
+        self.x_batches, self.y_batches = None, None
+        self.pointer = 0
+
+        print('Pre-processing data...')
+        self.pre_process()
+        self.create_batches()
+        print('Pre-processed {} lines of data.'.format(self.labels.shape[0]))
+
+    def pre_process(self):
+        """Pre-process data."""
+        with open(self.data_path, 'r') as f:
+            data = f.readlines()
+        # each line in data file is formatted according to [label, text] (e.g. 2 She went home)
+        text = [sample[2:].strip() for sample in data]
+        self.labels = np.array([[int(n) for n in re.findall(r'\d+', sample)] for sample in data])
+        self.embedding = np.zeros((len(text), self.seq_length), dtype=int)
+        for i, sample in enumerate(text):
+            tokens = tokenize(text[i])
+            self.embedding[i] = list(map(self.vocab.get, tokens)) + [1] + [0] * (self.seq_length - len(tokens) - 1)
+
+    def create_batches(self):
+        """Split data into training batches."""
+        self.n_batches = int(self.embedding.shape[0] / self.batch_size)
+        # truncate training data so it is equally divisible into batches
+        self.embedding = self.embedding[:self.n_batches * self.batch_size, :]
+        self.labels = self.labels[:self.n_batches * self.batch_size, :]
+
+        # split training data into equal sized batches
+        self.x_batches = np.split(self.embedding, self.n_batches, 0)
+        self.y_batches = np.split(self.labels, self.n_batches, 0)
+
+    def next_batch(self):
+        """Return current batch, increment pointer by 1 (modulo n_batches)"""
+        x, y = self.x_batches[self.pointer], self.y_batches[self.pointer]
+        self.pointer = (self.pointer + 1) % self.n_batches
+        return x, y
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--n_passages', type=int, default=5000, help='Number of passages to generate.')
@@ -100,5 +153,5 @@ if __name__ == '__main__':
             vocab = vocab.union(set(tokenize(passage)))
 
     with open(args.vocab_path, 'w') as file:
-        vocab_dict = {word: i+1 for i, word in enumerate(list(vocab))}  # reserve 0 for padding
+        vocab_dict = {word: i+2 for i, word in enumerate(list(vocab))}  # reserve 0 for padding, 1 for EOF
         json.dump(vocab_dict, file)

@@ -8,7 +8,7 @@ from tensorflow.contrib.seq2seq import BahdanauAttention
 
 MAX_LENGTH = 45
 BATCH_SIZE = 100
-LEARNING_RATE = 0.00005
+LEARNING_RATE = 0.01
 EPOCH = 50000
 
 ENCODER_CELL = tf.contrib.rnn.LSTMCell
@@ -23,7 +23,7 @@ DECODER_CELL = tf.contrib.rnn.LSTMCell
 DECODER_UNITS = 50
 DECODER_LAYERS = 3
 
-SAVE_DIR = './model/model.ckpt'
+SAVE_DIR = './models/model.ckpt'
 
 
 class PointerNet(object):
@@ -31,7 +31,7 @@ class PointerNet(object):
         with tf.variable_scope('inputs'):
             # load pre-trained GloVe embeddings
             word_matrix = tf.constant(np.load('./data/word_matrix.npy'), dtype=tf.float32)
-            self.word_matrix = tf.Variable(word_matrix, trainable=False, name='word_matrix')
+            self.word_matrix = tf.Variable(word_matrix, trainable=True, name='word_matrix')
 
             # input placeholder for sequence of words
             self.inputs = tf.placeholder(tf.int32, [BATCH_SIZE, MAX_LENGTH], name='inputs')
@@ -41,7 +41,6 @@ class PointerNet(object):
         with tf.variable_scope('outputs'):
             # output placeholder for labels
             self.outputs = tf.placeholder(tf.int32, [BATCH_SIZE, N_POINTERS], name='outputs')
-            self.labels = tf.unstack(self.outputs, axis=1)
             # sequence length for pointers is always equal to the number of pointers
             self.output_lengths = tf.constant(np.full(BATCH_SIZE, N_POINTERS), dtype=tf.int32)
 
@@ -61,10 +60,9 @@ class PointerNet(object):
             dec_cell = tf.contrib.rnn.MultiRNNCell([DECODER_CELL(DECODER_UNITS) for _ in range(DECODER_LAYERS)])
             attn_cell = tf.contrib.seq2seq.AttentionWrapper(dec_cell, attention, attention_layer_size=ATTN_SIZE,
                                                             alignment_history=True)
-            init_state = attn_cell.zero_state(BATCH_SIZE, dtype=tf.float32)
-            helper = tf.contrib.seq2seq.TrainingHelper(tf.cast(tf.expand_dims(self.outputs, 2), tf.float32),
-                                                       self.output_lengths)
-            decoder = tf.contrib.seq2seq.BasicDecoder(attn_cell, helper, init_state)
+            # init_state = attn_cell.zero_state(BATCH_SIZE, dtype=tf.float32)
+            helper = tf.contrib.seq2seq.TrainingHelper(tf.gather(self.embedded, self.outputs), self.output_lengths)
+            decoder = tf.contrib.seq2seq.BasicDecoder(attn_cell, helper, enc_state)
             _, states, _ = tf.contrib.seq2seq.dynamic_decode(decoder, maximum_iterations=N_POINTERS)
 
         with tf.variable_scope('pointers'):
@@ -75,6 +73,7 @@ class PointerNet(object):
         with tf.variable_scope('loss'):
             self.loss = tf.zeros(())
             pointers = tf.unstack(self.pointer_prob)
+            self.labels = tf.unstack(self.outputs, axis=1)
 
             equal = []
             for i in range(N_POINTERS):
@@ -85,7 +84,7 @@ class PointerNet(object):
             self.exact_match = tf.reduce_mean(self.all_correct)
 
         with tf.variable_scope('training'):
-            self.train_step = tf.train.AdamOptimizer(LEARNING_RATE).minimize(self.loss)
+            self.train_step = tf.train.RMSPropOptimizer(LEARNING_RATE).minimize(self.loss)
 
 
 if __name__ == '__main__':
