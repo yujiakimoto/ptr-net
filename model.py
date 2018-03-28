@@ -8,7 +8,7 @@ from tensorflow.contrib.seq2seq import BahdanauAttention
 
 MAX_LENGTH = 45
 BATCH_SIZE = 100
-LEARNING_RATE = 0.0001
+LEARNING_RATE = 0.00005
 EPOCH = 50000
 
 ENCODER_CELL = tf.contrib.rnn.LSTMCell
