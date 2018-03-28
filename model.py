@@ -9,6 +9,7 @@ from tensorflow.contrib.seq2seq import BahdanauAttention
 MAX_LENGTH = 45
 BATCH_SIZE = 100
 LEARNING_RATE = 0.0001
+EPOCH = 50000
 
 ENCODER_CELL = tf.contrib.rnn.LSTMCell
 ENCODER_UNITS = 25
@@ -21,6 +22,8 @@ N_POINTERS = 1
 DECODER_CELL = tf.contrib.rnn.LSTMCell
 DECODER_UNITS = 50
 DECODER_LAYERS = 3
+
+SAVE_DIR = './model/model.ckpt'
 
 
 class PointerNet(object):
@@ -87,4 +90,3 @@ class PointerNet(object):
 
 if __name__ == '__main__':
     model = PointerNet()
-
