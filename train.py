@@ -1,106 +1,78 @@
 """
-Training Script
+Train PointerNet model.
 """
-import model
-from model import PointerNet
-from glove import encode
-import json
-from sklearn.model_selection import train_test_split
-from data import tokenize
+
+import argparse
+import os
 import tensorflow as tf
-import numpy as np
+import sys
+from data import Loader
+from model import PointerNet
 from tqdm import tqdm
 
-def train():
-    # TODO : parse user argument
-    # load train file
-    with open('data/train.txt', 'r') as f:
-        data = f.readlines()
-    # load dictionary
-    with open('data/vocab.json', 'r') as f:
-        word_dict = json.load(f)
 
-    # process data
-    contents = [x[2:].strip() for x in data]
+def train(args):
+    # load data
+    vocab_path = os.path.join(args.data_dir, 'vocab.json')
+    training = Loader(os.path.join(args.data_dir, 'train.txt'), vocab_path, args.batch_size, 45)
+    validation = Loader(os.path.join(args.data_dir, 'validate.txt'), vocab_path, args.batch_size, 45)
 
-    # dataset = encode(word_dict,contents,model.MAX_LENGTH)
-    labels = [int(x[:1].strip()) for x in data]
-
-    # Train / validation / test split
-    X_train, X_test, y_train, y_test = train_test_split(contents, labels, test_size = 0.2)
-    X_train, X_val, y_train, y_val = train_test_split(X_train, y_train, test_size = 0.1)
-
-    X_train = np.array(X_train)
-    y_train = np.array(y_train)
-    X_val = np.array(X_val)
-    y_val = np.array(y_val)
-    X_test = np.array(X_test)
-    y_test = np.array(y_test)
-
-    # Training iteration
-    ptr_model = PointerNet()
+    # create TensorFlow graph
+    ptr_net = PointerNet()
     saver = tf.train.Saver()
-    # number of iteration per epoch
-    total_batch = int(len(X_train) / model.BATCH_SIZE)
-    val_batch = int(len(X_val) / model.BATCH_SIZE)
-    # best validation EM
-    best_val_acc = 0.0
-    # train loss
-    train_loss = tf.reduce_mean(ptr_model.loss)
+    best_val_acc = 0
+
+    # record training loss & accuracy
+    train_losses = []
+    train_accuracies = []
+
     # initialize graph
     init = tf.global_variables_initializer()
     with tf.Session() as sess:
         sess.run(init)
-        for i in tqdm(range(model.EPOCH)):
-            # shuffle data
-            idx = np.random.permutation(len(X_train))
-            X_train = X_train[idx]
-            y_train = y_train[idx]
-            inputs = encode(word_dict, X_train, model.MAX_LENGTH)
-            input_lengths = [len(tokenize(x)) for x in X_train]
-            # train iteration
-            for itr in range(total_batch):
-                x_in = inputs[itr*model.BATCH_SIZE:itr*model.BATCH_SIZE+model.BATCH_SIZE]
-                in_len = input_lengths[itr*model.BATCH_SIZE:itr*model.BATCH_SIZE+model.BATCH_SIZE]
-                out = y_train[itr*model.BATCH_SIZE:itr*model.BATCH_SIZE+model.BATCH_SIZE]
+        for ep in tqdm(range(args.n_epochs)):
+            tr_loss, tr_acc = 0, 0
+            for itr in range(training.n_batches):
+                x_batch, x_lengths, y_batch = training.next_batch()
+                train_dict = {ptr_net.inputs: x_batch, ptr_net.input_lengths: x_lengths, ptr_net.outputs: y_batch}
+                loss, acc, _ = sess.run([ptr_net.loss, ptr_net.exact_match, ptr_net.train_step], feed_dict=train_dict)
+                tr_loss += loss
+                tr_acc += acc
 
-                l,em,_ = sess.run([train_loss, ptr_model.exact_match, ptr_model.train_step], feed_dict={
-                    ptr_model.inputs: x_in,
-                    ptr_model.input_lengths: in_len,
-                    ptr_model.outputs : out.reshape(-1,1)})
+            train_losses.append(tr_loss / training.n_batches)
+            train_accuracies.append(tr_acc / training.n_batches)
 
-            if i % 100 == 0:
-                idx = np.random.permutation(len(X_val))
-                X_val = X_val[idx]
-                y_val = y_val[idx]
-                val_inputs = encode(word_dict, X_val, model.MAX_LENGTH)
-                val_input_lengths = [len(tokenize(x)) for x in X_val]
+            # check validation accuracy every 100 epochs
+            if ep % 100 == 0:
+                val_acc = 0
+                for itr in range(validation.n_batches):
+                    x_batch, x_lengths, y_batch = validation.next_batch()
+                    val_dict = {ptr_net.inputs: x_batch, ptr_net.input_lengths: x_lengths, ptr_net.outputs: y_batch}
+                    val_acc += sess.run(ptr_net.exact_match, feed_dict=val_dict)
+                val_acc = val_acc / validation.n_batches
 
-                for itr in range(val_batch):
-                    x_in = val_inputs[itr*model.BATCH_SIZE:itr*model.BATCH_SIZE+model.BATCH_SIZE]
-                    in_len = val_input_lengths[itr*model.BATCH_SIZE:itr*model.BATCH_SIZE+model.BATCH_SIZE]
-                    out = y_val[itr*model.BATCH_SIZE:itr*model.BATCH_SIZE+model.BATCH_SIZE]
-
-                    v_em = sess.run(ptr_model.exact_match, feed_dict={
-                        ptr_model.inputs: x_in,
-                        ptr_model.input_lengths: in_len,
-                        ptr_model.outputs : out.reshape(-1,1)})
-
-
-                print("{} epoch, loss {:.2f}".format(i, l))
-                print("Train EM : {:.2f}, Validation EM : {:.2f}".format(em, v_em))
+                print("epoch {:3d}, loss={:.2f}".format(ep, tr_loss / training.n_batches))
+                print("Train EM: {:.2f}, Validation EM: {:.2f}".format(tr_acc / training.n_batches, val_acc))
 
                 # save model
-                if v_em > best_val_acc:
-                    save_path = saver.save(sess, model.SAVE_DIR)
-                    best_val_acc = v_em
-                    print("Model saved")
+                if val_acc > best_val_acc:
+                    print('Validation accuracy increased. Saving model.')
+                    saver.save(sess, os.path.join(args.save_dir, 'ptr_net.ckpt'))
+                    best_val_acc = val_acc
+                else:
+                    print('Validation accuracy decreased. Restoring model.')
+                    saver.restore(sess, os.path.join(args.save_dir, 'ptr_net.ckpt'))
 
-        print("Training Done")
-        print("Best Validation EM : {:.2f}".format(best_val_acc))
+        print('Training complete.')
+        print('Best Validation EM: {:.2f}".format(best_val_acc)')
 
 
-
-
-if __name__ == "__main__":
-    train()
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--data_dir', type=str, default='./data', help='Directory in which data is stored.')
+    parser.add_argument('--save_dir', type=str, default='./models', help='Where to save checkpoint models.')
+    parser.add_argument('--n_epochs', type=int, default=10000, help='Number of epochs to run.')
+    parser.add_argument('--batch_size', type=int, default=100, help='Batch size.')
+    parser.add_argument('--learning_rate', type=float, default=0.01, help='Learning rate for Adam optimizer.')
+    args = parser.parse_args(sys.argv[1:])
+    train(args)
