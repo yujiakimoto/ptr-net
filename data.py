@@ -89,10 +89,11 @@ class Loader(object):
             self.vocab = json.load(f)
             self.vocab_size = len(self.vocab)
 
-        self.embedding = np.empty(())
-        self.labels = np.empty(())
+        self.embedding = None
+        self.lengths = None
+        self.labels = None
         self.n_batches = None
-        self.x_batches, self.y_batches = None, None
+        self.x_batches, self.x_lengths, self.y_batches = None, None, None
         self.pointer = 0
 
         print('Pre-processing data...')
@@ -108,8 +109,10 @@ class Loader(object):
         text = [sample[2:].strip() for sample in data]
         self.labels = np.array([[int(n) for n in re.findall(r'\d+', sample)] for sample in data])
         self.embedding = np.zeros((len(text), self.seq_length), dtype=int)
+        self.lengths = np.zeros(len(text), dtype=int)
         for i, sample in enumerate(text):
             tokens = tokenize(text[i])
+            self.lengths[i] = len(tokens)
             self.embedding[i] = list(map(self.vocab.get, tokens)) + [1] + [0] * (self.seq_length - len(tokens) - 1)
 
     def create_batches(self):
@@ -117,36 +120,52 @@ class Loader(object):
         self.n_batches = int(self.embedding.shape[0] / self.batch_size)
         # truncate training data so it is equally divisible into batches
         self.embedding = self.embedding[:self.n_batches * self.batch_size, :]
+        self.lengths = self.lengths[:self.n_batches * self.batch_size]
         self.labels = self.labels[:self.n_batches * self.batch_size, :]
 
         # split training data into equal sized batches
         self.x_batches = np.split(self.embedding, self.n_batches, 0)
+        self.x_lengths = np.split(self.lengths, self.n_batches)
         self.y_batches = np.split(self.labels, self.n_batches, 0)
 
     def next_batch(self):
         """Return current batch, increment pointer by 1 (modulo n_batches)"""
-        x, y = self.x_batches[self.pointer], self.y_batches[self.pointer]
+        x, x_len, y = self.x_batches[self.pointer], self.lengths[self.pointer], self.y_batches[self.pointer]
         self.pointer = (self.pointer + 1) % self.n_batches
-        return x, y
+        return x, x_len, y
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--n_passages', type=int, default=5000, help='Number of passages to generate.')
-    parser.add_argument('--data_path', type=str, default='./data/train.txt', help='Where to save training data.')
+    parser.add_argument('--data_path', type=str, default='./data', help='Where to save training data.')
     parser.add_argument('--vocab_path', type=str, default='./data/vocab.json', help='Where to save vocabulary.')
     args = parser.parse_args(sys.argv[1:])
 
-    # if file at args.data_path exists already, delete it
-    try:
-        os.remove(args.data_path)
-    except OSError:
-        pass
+    # if files at args.data_path exist already, delete it
+    for file in ['train.txt', 'validate.txt', 'test.txt']:
+        path = os.path.join(args.data_path, file)
+        if os.path.exists(path):
+            os.remove(path)
 
-    # write training data to txt file; save vocabulary in json file
+    # write training, validate, test data to txt files; save vocabulary in json file
     vocab = set()
-    with open(args.data_path, 'a') as file:
+    with open(os.path.join(args.data_path, 'train.txt'), 'a') as file:
         for _ in range(args.n_passages):
+            n_sentences = np.random.randint(1, 5)
+            passage, idx = generate_passage(n_sentences)
+            file.write('{} {}\n'.format(idx, passage))
+            vocab = vocab.union(set(tokenize(passage)))
+
+    with open(os.path.join(args.data_path, 'validate.txt'), 'a') as file:
+        for _ in range(int(args.n_passages/5)):
+            n_sentences = np.random.randint(1, 5)
+            passage, idx = generate_passage(n_sentences)
+            file.write('{} {}\n'.format(idx, passage))
+            vocab = vocab.union(set(tokenize(passage)))
+
+    with open(os.path.join(args.data_path, 'test.txt'), 'a') as file:
+        for _ in range(int(args.n_passages/5)):
             n_sentences = np.random.randint(1, 5)
             passage, idx = generate_passage(n_sentences)
             file.write('{} {}\n'.format(idx, passage))
