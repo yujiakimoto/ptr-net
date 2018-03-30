@@ -89,6 +89,7 @@ class Loader(object):
             self.vocab = json.load(f)
             self.vocab_size = len(self.vocab)
 
+        self.text = []
         self.embedding = None
         self.lengths = None
         self.labels = None
@@ -106,14 +107,14 @@ class Loader(object):
         with open(self.data_path, 'r') as f:
             data = f.readlines()
         # each line in data file is formatted according to [label, text] (e.g. 2 She went home)
-        text = [sample[2:].strip() for sample in data]
+        self.text = [sample[2:].strip() for sample in data]
         self.labels = np.array([[int(n) for n in re.findall(r'\d+', sample)] for sample in data])
-        self.embedding = np.zeros((len(text), self.seq_length), dtype=int)
-        self.lengths = np.zeros(len(text), dtype=int)
-        for i, sample in enumerate(text):
-            tokens = tokenize(text[i])
+        self.embedding = np.zeros((len(self.text), self.seq_length), dtype=int)
+        self.lengths = np.zeros(len(self.text), dtype=int)
+        for i, sample in enumerate(self.text):
+            tokens = tokenize(self.text[i])
             self.lengths[i] = len(tokens)
-            self.embedding[i] = list(map(self.vocab.get, tokens)) + [1] + [0] * (self.seq_length - len(tokens) - 1)
+            self.embedding[i] = list(map(self.vocab.get, tokens)) + [0] * (self.seq_length - len(tokens))
 
     def create_batches(self):
         """Split data into training batches."""
@@ -130,7 +131,7 @@ class Loader(object):
 
     def next_batch(self):
         """Return current batch, increment pointer by 1 (modulo n_batches)"""
-        x, x_len, y = self.x_batches[self.pointer], self.lengths[self.pointer], self.y_batches[self.pointer]
+        x, x_len, y = self.x_batches[self.pointer], self.x_lengths[self.pointer], self.y_batches[self.pointer]
         self.pointer = (self.pointer + 1) % self.n_batches
         return x, x_len, y
 
@@ -172,5 +173,5 @@ if __name__ == '__main__':
             vocab = vocab.union(set(tokenize(passage)))
 
     with open(args.vocab_path, 'w') as file:
-        vocab_dict = {word: i+2 for i, word in enumerate(list(vocab))}  # reserve 0 for padding, 1 for EOF
+        vocab_dict = {word: i+2 for i, word in enumerate(list(vocab))}  # reserve 0 for padding, 1 for <start>
         json.dump(vocab_dict, file)
