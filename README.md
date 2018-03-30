@@ -41,7 +41,7 @@ An encoder network reads the input data, producing an embedding vector
 for each input. A decoder network then begins generating outputs - with 
 a pointer network, the softmaxed attention weights over the inputs are used
 as probabilistic "pointers" that point to an element in the input sequence.  
-[ptr-net](images/ptr-net.png) 
+![ptr-net](images/ptr-net.png) 
 
 
 The inputs to the pointer network are integer-encoded passages. To account
