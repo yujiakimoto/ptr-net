@@ -63,7 +63,7 @@ time step.
 self.pointer_labels = tf.placeholder(tf.int32, [batch_size, n_pointers])
 start_tokens = tf.constant(START_TOKEN, shape=[batch_size], dtype=tf.int32)
 self.decoder_labels = tf.stack([tf.gather(inp, ptr) for inp, ptr in 
-                                list(zip(tf.unstack(self.encoder_inputs), tf.unstack(self.pointer_labels)))])
+                      list(zip(tf.unstack(self.encoder_inputs), tf.unstack(self.pointer_labels)))])
 self.decoder_inputs = tf.concat([tf.expand_dims(start_tokens, 1), self.decoder_labels], 1)
 self.output_lengths = tf.constant(n_pointers, shape=[batch_size])
 ```
@@ -92,7 +92,7 @@ self.encoder_outputs, _ = tf.nn.dynamic_rnn(enc_cell, self.input_embeds, self.in
 Here, we use the `BahdanauAttention` class to compute attention weights and context vectors as this was used in
 the original paper - this can be substituted with other mechanisms such as Luong attention if desired.
 ```python
-attention = tf.contrib.seq2seq.BahdanauAttention(n_units, self.encoder_outputs,        memory_sequence_length=self.input_lengths)
+attention = tf.contrib.seq2seq.BahdanauAttention(n_units, self.encoder_outputs, memory_sequence_length=self.input_lengths)
 ```
 
 The `GreedyEmbeddingHelper` ensures that at training time, the decoder network uses the predicted pointer (i.e. the
