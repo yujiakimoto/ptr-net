@@ -36,9 +36,9 @@ def embedding_matrix(vocab, embed_vectors, embed_size):
         embed_vectors (dict): dictionary mapping each word to its vector representation.
         embed_size (int):     length of each embedding vector.
     Returns:
-        np.ndarray:           embedding matrix with shape (vocab size+2, embedding size)
+        np.ndarray:           embedding matrix with shape (vocab size+1, embedding size)
     """
-    matrix = np.zeros((len(vocab)+2, embed_size))  # extra rows for padding, EOF
+    matrix = np.zeros((len(vocab)+2, embed_size))  # extra rows for padding, <start>
     for word, i in vocab.items():
         vector = embed_vectors[word]
         assert vector.size == embed_size, 'All embedding vectors must have same length.'
